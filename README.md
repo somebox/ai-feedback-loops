@@ -2,7 +2,7 @@
 
 A CLI tool that creates animations by iteratively transforming images through AI. Feed it an image and a transformation prompt, and it runs multiple passes through an AI image model, feeding each output back as the next input. The result is a sequence of progressively transformed frames, compiled into a video.
 
-Uses [OpenRouter](https://openrouter.ai/) to access various image generation models.
+This solution is loosely based on [nano-banana-loop](https://github.com/radames/nano-banana-loop) but uses [OpenRouter](https://openrouter.ai/) to access various image generation models (instead of fal.ai), and adds new modes and features.
 
 ## Examples
 
