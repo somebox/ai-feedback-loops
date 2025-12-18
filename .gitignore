@@ -1,0 +1,14 @@
+tmp/
+output/*
+.DS_Store
+.env
+.venv
+pycache
+__pycache__
+build/
+dist/
+*.egg-info/
+/.ruff_cache/
+reading_list.json
+secrets.yaml
+index.sqlite
