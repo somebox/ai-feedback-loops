@@ -16,7 +16,7 @@ uv run src/image_loop.py --image east-village.jpg --mode bizarre --model flux-pr
 
 ![East Village Bizarre](examples/east-village-bizarre-collage.png)
 
-https://github.com/user-attachments/assets/east-village-bizarre.mp4
+https://github.com/somebox/ai-feedback-loops/raw/refs/heads/main/examples/east-village-bizarre.mp4
 
 ---
 
@@ -30,7 +30,7 @@ uv run src/image_loop.py --image cats-turkey.jpg --mode next --model flux-pro --
 
 ![Cats Turkey](examples/cats-turkey-collage.png)
 
-https://github.com/user-attachments/assets/cats-turkey.mp4
+https://github.com/somebox/ai-feedback-loops/raw/refs/heads/main/examples/cats-turkey.mp4
 
 ---
 
@@ -44,7 +44,7 @@ uv run src/image_loop.py --image cats.png --mode politic-right --model riverflow
 
 ![Rightwing Cats](examples/rightwing-cats-collage.png)
 
-https://github.com/user-attachments/assets/rightwing-cats.mp4
+https://github.com/somebox/ai-feedback-loops/raw/refs/heads/main/examples/rightwing-cats.mp4
 
 ---
 
@@ -58,7 +58,7 @@ uv run src/image_loop.py --image painting.jpg --mode bizarre --model riverflow -
 
 ![Painting Bizarre](examples/painting-bizarre-collage.png)
 
-https://github.com/user-attachments/assets/painting-bizarre.mp4
+https://github.com/somebox/ai-feedback-loops/raw/refs/heads/main/examples/painting-bizarre.mp4
 
 ---
 
