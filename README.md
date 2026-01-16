@@ -1,8 +1,8 @@
 # Image Loop Generator
 
-A CLI tool that creates animations by iteratively transforming images using AI models via OpenRouter. Give it an image and a "mode" (a preset prompt), and it runs multiple passes through an AI image model, passing each output back as the next input. The result is a sequence of progressively transformed frames, compiled into a video or GIF.
+A CLI tool that creates AI-generated animations by iteratively transforming images using AI models via OpenRouter. Give it an image and a "mode" (a preset prompt), and it runs multiple passes of image generation, passing each output as the next input. The result is a sequence of progressively transformed frames, compiled into a video or GIF.
 
-I developed this as a way to research different image models to identify biases and limitations. As images are progressively transformed you can also observe artifacts and distortions that emerge.
+I developed this as a way to research and compare different image models and to identify biases and limitations. As images are progressively transformed you can observe preferences in race, culture and politics, discover guardrails and see artifacts and distortions that emerge.
 
 This project is loosely based on [nano-banana-loop](https://github.com/radames/nano-banana-loop) but uses [OpenRouter](https://openrouter.ai/) to access various [image generation models](https://openrouter.ai/models?fmt=cards&input_modalities=image&output_modalities=image&order=newest) (instead of fal.ai), and adds new modes and features.
 
