@@ -7,10 +7,10 @@ A CLI tool that creates AI-generated animations by iteratively transforming imag
 **Usage:**
 
 ```bash
-uv run src/image_loop.py --image photo.jpg --mode evolve --frames 10 --model nano-banana
+python src/image_loop.py --image photo.jpg --mode evolve --frames 10 --model nano-banana
 ```
 
-I developed this as a way to research and compare different image models and to identify biases and limitations. As images are progressively transformed you can observe preferences in race, culture and politics, discover guardrails and see artifacts and distortions that emerge.
+I developed this as a way to research and compare different image models and to identify their biases and limitations. As images are progressively transformed you can observe preferences in race, culture and politics, discover guardrails and see artifacts and distortions that emerge.
 
 The project was inspired by [nano-banana-loop](https://github.com/radames/nano-banana-loop) but uses [OpenRouter](https://openrouter.ai/) to access various [image generation models](https://openrouter.ai/models?fmt=cards&input_modalities=image&output_modalities=image&order=newest) (instead of fal.ai), and adds a gallery, new modes and features.
 
