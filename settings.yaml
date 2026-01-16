@@ -13,7 +13,7 @@ prompts:
   down: "Gently pan the camera down, extending the image."
   left: "Gently pan the camera left, extending the image."
   right: "Gently pan the camera right, extending the image."
-  orbit: "The camera is on a circular track orbiting the subject; move the camera along that track to the left a bit and show what the image looks like from that new perspective"
+  orbit: "The camera is a drone orbiting the subject: show the scene when the camera has moved to the left a bit on that circular path."
   rotate: "Gently rotate the camera clockwise, extending the borders to fit the new perspective."
   zoom-in: "Gently zoom in on the center of the image, maintaining focus and detail."
   zoom-out: "Gently zoom out from the image, revealing more of the surrounding scene."
@@ -21,7 +21,7 @@ prompts:
   past: "Show this scene one second in the past"
   funny: "Subtly alter this image by replacing one or two details with something that makes the image more humorous or silly."
   highlight: "Subtly alter this image to bring more attention to a subtle detail"
-  dramatic: "Subtly enhance the drama and intensity of this scene. Adjust lighting to be more cinematic, deepen shadows, or add atmospheric elements like mist or dramatic sky."
+  timelapse: "this is an image from a timelapse video, show the scene one hour later."
   peaceful: "Transform this scene to be more peaceful and serene. Soften harsh elements, add calming details like gentle lighting or natural elements."
   powerful: "Transform this scene to be more powerful and intense. Make it slightly more intense and extreme."
   vintage: "Apply a subtle vintage aesthetic to this image. Add slight film grain, adjust colors to warmer or cooler vintage tones, and create a nostalgic atmosphere."
@@ -49,6 +49,7 @@ prompts:
   unexpected: "show something unexpected that happened just a second after this image was taken"
   redacted: "replace any redacted black square with the likely original content that was obscured, then find a new area of the image to redact and cover it with a black square."
   hidden: "find something that is hidden from view in this image, and remove the item obstructing the view"
+  drone: "the camera is attached to a flying drone filming a video flyby, show the next frame of this footage."
 
 # Default values
 defaults:

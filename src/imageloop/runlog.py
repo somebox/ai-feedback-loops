@@ -33,6 +33,7 @@ class RunLog:
             "requested_frames": None,
             "fps": None,
             "output_format": None,
+            "command_line": None,
         }
         
         # Cumulative stats (across all sessions)
@@ -269,7 +270,7 @@ class RunLog:
         
         return log
 
-    def print_summary(self):
+    def print_summary(self, show_continue_command: bool = True, continue_command: str = None):
         """Print a human-readable summary to console."""
         stats = self.stats
         elapsed = stats["total_time_seconds"]
@@ -292,6 +293,40 @@ class RunLog:
             lines.append(f"⚡ Avg time per frame: {elapsed/stats['frames_generated']:.1f}s")
             lines.append(f"💵 Cost per frame: ${stats['total_cost']/stats['frames_generated']:.4f}")
         lines.append("=" * 50)
+        
+        # Show original command line if available
+        command_line = self.config.get("command_line")
+        if command_line:
+            lines.append("")
+            lines.append("📋 Original command:")
+            lines.append(f"   {command_line}")
+            lines.append("")
+        
+        # Add continue command if run_dir is available
+        if show_continue_command and self.run_dir:
+            if continue_command:
+                # Use provided continue command
+                lines.append("")
+                lines.append("🔄 To continue this run:")
+                lines.append(f"   {continue_command}")
+                lines.append("")
+            else:
+                # Build continue command
+                run_path = self.run_dir
+                # Use relative path if possible for cleaner output
+                try:
+                    run_path = run_path.relative_to(Path.cwd())
+                except ValueError:
+                    pass
+                
+                # Get default frames from config or use 10
+                requested = self.config.get("requested_frames", 10)
+                default_frames = requested if requested > 0 else 10
+                
+                lines.append("")
+                lines.append("🔄 To continue this run:")
+                lines.append(f"   python src/image_loop.py --continue {run_path} --frames {default_frames}")
+                lines.append("")
         
         print("\n".join(lines))
 

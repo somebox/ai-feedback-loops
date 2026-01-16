@@ -3,6 +3,7 @@ output/*
 .DS_Store
 .env
 .venv
+venv
 pycache
 __pycache__
 build/

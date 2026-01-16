@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import shlex
 import signal
 import sys
 from datetime import datetime
@@ -40,6 +41,57 @@ def cmd_list_modes(cfg: dict):
     for name, prompt in sorted(prompts.items()):
         print(f"  {name:15} - {prompt[:60]}{'...' if len(prompt) > 60 else ''}")
     return 0
+
+
+def build_command_line(args, defaults: dict, script_name: str = "python src/image_loop.py") -> str:
+    """Reconstruct the command line from parsed arguments, omitting defaults."""
+    parts = [script_name]
+    
+    # Required/important arguments
+    if hasattr(args, 'image') and args.image:
+        parts.append(f"--image {shlex.quote(str(args.image))}")
+    
+    if hasattr(args, 'mode') and args.mode:
+        parts.append(f"--mode {shlex.quote(args.mode)}")
+    
+    if hasattr(args, 'prompt') and args.prompt:
+        parts.append(f"--prompt {shlex.quote(args.prompt)}")
+    
+    # Optional arguments (only include if different from defaults)
+    if hasattr(args, 'frames') and args.frames != defaults.get("frames", 10):
+        parts.append(f"--frames {args.frames}")
+    
+    if hasattr(args, 'model') and args.model:
+        parts.append(f"--model {shlex.quote(args.model)}")
+    
+    if hasattr(args, 'output') and args.output != defaults.get("output_dir", "output"):
+        parts.append(f"--output {shlex.quote(str(args.output))}")
+    
+    if hasattr(args, 'size') and args.size != defaults.get("size", "auto"):
+        parts.append(f"--size {shlex.quote(args.size)}")
+        if args.size == "custom" and hasattr(args, 'width') and hasattr(args, 'height'):
+            if args.width and args.height:
+                parts.append(f"--width {args.width} --height {args.height}")
+    
+    if hasattr(args, 'temperature') and args.temperature != defaults.get("temperature", 0.7):
+        parts.append(f"--temperature {args.temperature}")
+    
+    if hasattr(args, 'top_p') and args.top_p != defaults.get("top_p", 0.9):
+        parts.append(f"--top-p {args.top_p}")
+    
+    if hasattr(args, 'seed') and args.seed is not None:
+        parts.append(f"--seed {args.seed}")
+    
+    if hasattr(args, 'fps') and args.fps != defaults.get("fps", 1):
+        parts.append(f"--fps {args.fps}")
+    
+    if hasattr(args, 'format') and args.format != defaults.get("output_format", "mp4"):
+        parts.append(f"--format {args.format}")
+    
+    if hasattr(args, 'verbose') and args.verbose:
+        parts.append("--verbose")
+    
+    return " ".join(parts)
 
 
 def cmd_list_models(cfg: dict):
@@ -159,6 +211,50 @@ async def cmd_continue(args, cfg: dict):
         run_log = runlog.RunLog(run_dir=run_dir)
         # Populate from parsed settings
         run_log.set_config(**saved_settings)
+    
+    # Build continue command line
+    run_path = run_dir
+    # Use relative path if possible for cleaner output
+    try:
+        run_path = run_path.relative_to(Path.cwd())
+    except ValueError:
+        pass
+    
+    # Build continue command from current args, replacing --image with --continue
+    continue_parts = ["python", "src/image_loop.py", f"--continue {shlex.quote(str(run_path))}"]
+    
+    # Add other args that differ from defaults or saved settings
+    defaults = cfg.get("defaults", {})
+    if args.frames != saved_settings.get("requested_frames", defaults.get("frames", 10)):
+        continue_parts.append(f"--frames {args.frames}")
+    
+    if args.mode and args.mode != saved_settings.get("mode"):
+        continue_parts.append(f"--mode {shlex.quote(args.mode)}")
+        if args.prompt:
+            continue_parts.append(f"--prompt {shlex.quote(args.prompt)}")
+    
+    if args.model:
+        continue_parts.append(f"--model {shlex.quote(args.model)}")
+    
+    if args.temperature != saved_settings.get("temperature", defaults.get("temperature", 0.7)):
+        continue_parts.append(f"--temperature {args.temperature}")
+    
+    if args.top_p != saved_settings.get("top_p", defaults.get("top_p", 0.9)):
+        continue_parts.append(f"--top-p {args.top_p}")
+    
+    if args.seed is not None:
+        continue_parts.append(f"--seed {args.seed}")
+    
+    if args.fps != saved_settings.get("fps", defaults.get("fps", 1)):
+        continue_parts.append(f"--fps {args.fps}")
+    
+    if args.format != saved_settings.get("output_format", defaults.get("output_format", "mp4")):
+        continue_parts.append(f"--format {args.format}")
+    
+    if args.verbose:
+        continue_parts.append("--verbose")
+    
+    continue_command = " ".join(continue_parts)
     
     # Model priority: explicit CLI arg > saved from log > default
     if args.model:
@@ -299,11 +395,33 @@ async def cmd_continue(args, cfg: dict):
         run_log.end_session()
 
     # Regenerate outputs with all frames
+    # Use saved format/fps from config to match original run, unless explicitly overridden
+    # Check if user explicitly overrode format by comparing to default
+    defaults = cfg.get("defaults", {})
+    saved_format = saved_settings.get("output_format", defaults.get("output_format", "mp4"))
+    default_format = defaults.get("output_format", "mp4")
+    
+    # If args.format matches default but saved format is different, user didn't override - use saved
+    # If args.format is different from default, user explicitly set it - use args.format
+    if args.format == default_format and args.format != saved_format:
+        output_format = saved_format
+    else:
+        output_format = args.format
+    
+    # Same logic for fps
+    saved_fps = saved_settings.get("fps", defaults.get("fps", 1))
+    default_fps = defaults.get("fps", 1)
+    if args.fps == default_fps and args.fps != saved_fps:
+        output_fps = saved_fps
+    else:
+        output_fps = args.fps
+    
     if run_log.stats["frames_generated"] > 0:
-        job.generate_outputs(images_dir, run_dir, args.fps, args.format)
+        print(f"\n🎬 Regenerating outputs ({output_format}) with all {run_log.stats['total_frames']} frames...")
+        job.generate_outputs(images_dir, run_dir, output_fps, output_format)
 
     # Print and save report
-    run_log.print_summary()
+    run_log.print_summary(show_continue_command=True, continue_command=continue_command)
     log_path = run_log.save()
     print(f"\n📝 Run log saved: {log_path}")
 
@@ -375,6 +493,9 @@ async def cmd_generate(args, cfg: dict):
 
     print(f"📁 Output: {run_dir}")
 
+    # Build command line for reference
+    command_line = build_command_line(args, defaults, script_name="python src/image_loop.py")
+    
     # Initialize run log
     run_log = runlog.RunLog(run_dir=run_dir)
     run_log.set_config(
@@ -390,6 +511,7 @@ async def cmd_generate(args, cfg: dict):
         requested_frames=args.frames,
         fps=args.fps,
         output_format=args.format,
+        command_line=command_line,
     )
 
     # Save initial frame
@@ -505,7 +627,7 @@ async def cmd_generate(args, cfg: dict):
         job.generate_outputs(images_dir, run_dir, args.fps, args.format)
 
     # Print and save report
-    run_log.print_summary()
+    run_log.print_summary(show_continue_command=True)
     log_path = run_log.save()
     print(f"\n📝 Run log saved: {log_path}")
 

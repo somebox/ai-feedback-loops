@@ -122,6 +122,8 @@ Open `http://localhost:8080` in your browser to view the gallery.
 
 ## Examples
 
+Here's a few samples. See [examples](docs/examples.md) for more.
+
 ### East Village → Bizarre
 
 Transform a street scene by progressively adding unexpected elements.
@@ -242,6 +244,11 @@ uv run src/image_loop.py --list-models
 python src/image_loop.py --list-models
 ```
 
+This command shows:
+- All available image models from OpenRouter with pricing
+- Verification status (✓/✗) for configured shortcuts
+- Whether each shortcut points to a valid model
+
 **Configured shortcuts:**
 
 | Shortcut | Full Model ID |
@@ -253,6 +260,8 @@ python src/image_loop.py --list-models
 | `riverflow` | sourceful/riverflow-v2-standard-preview |
 
 You can use any full OpenRouter model ID directly with `--model`.
+
+**Note:** If a model disappears or changes, you'll see an error like `❌ API Error (400): Model not found` during generation. Update `settings.yaml` with a valid model ID, or use `--list-models` to find available alternatives.
 
 ## Output Sizes
 
