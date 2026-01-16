@@ -1,10 +1,18 @@
 # Image Loop Generator
 
+[![Tests](https://github.com/somebox/ai-feedback-loops/actions/workflows/tests.yml/badge.svg)](https://github.com/somebox/ai-feedback-loops/actions/workflows/tests.yml)
+
 A CLI tool that creates AI-generated animations by iteratively transforming images using AI models via OpenRouter. Give it an image and a "mode" (a preset prompt), and it runs multiple passes of image generation, passing each output as the next input. The result is a sequence of progressively transformed frames, compiled into a video or GIF.
+
+**Usage:**
+
+```bash
+uv run src/image_loop.py --image photo.jpg --mode evolve --frames 10 --model nano-banana
+```
 
 I developed this as a way to research and compare different image models and to identify biases and limitations. As images are progressively transformed you can observe preferences in race, culture and politics, discover guardrails and see artifacts and distortions that emerge.
 
-This project is loosely based on [nano-banana-loop](https://github.com/radames/nano-banana-loop) but uses [OpenRouter](https://openrouter.ai/) to access various [image generation models](https://openrouter.ai/models?fmt=cards&input_modalities=image&output_modalities=image&order=newest) (instead of fal.ai), and adds new modes and features.
+The project was inspired by [nano-banana-loop](https://github.com/radames/nano-banana-loop) but uses [OpenRouter](https://openrouter.ai/) to access various [image generation models](https://openrouter.ai/models?fmt=cards&input_modalities=image&output_modalities=image&order=newest) (instead of fal.ai), and adds a gallery, new modes and features.
 
 ## Flow
 
@@ -15,6 +23,35 @@ This project is loosely based on [nano-banana-loop](https://github.com/radames/n
 5. **Review**: The gallery displays all runs in a simple web interface
 
 Each run creates a timestamped directory with all frames, metadata, and generated animations.
+
+
+## Gallery
+
+This project includes a simple web gallery to view all generated runs:
+
+![Gallery](docs/gallery-screenshot.png)
+
+```bash
+# With uv:
+uv run src/gallery.py
+
+# With standard Python:
+python src/gallery.py
+
+# Custom port and output directory
+uv run src/gallery.py --port 3000 --output-dir /path/to/output
+# or
+python src/gallery.py --port 3000 --output-dir /path/to/output
+```
+
+The gallery displays:
+- **Run cards** with thumbnails of first and last frames
+- **Filtering** by model and mode
+- **Modal viewer** with frame-by-frame navigation
+- **Statistics** including cost, time, and frame details
+- **Playback controls** for animating through frames
+
+Open `http://localhost:8080` in your browser to view the gallery.
 
 ## Quick Start
 
@@ -90,35 +127,6 @@ python src/image_loop.py --list-models
 ```
 
 **Note:** Make sure your virtual environment is activated when using standard Python. With `uv`, dependencies are managed automatically.
-
-
-## Gallery
-
-View all your generated runs in a web gallery:
-
-![Gallery](docs/gallery-screenshot.png)
-
-```bash
-# With uv:
-uv run src/gallery.py
-
-# With standard Python:
-python src/gallery.py
-
-# Custom port and output directory
-uv run src/gallery.py --port 3000 --output-dir /path/to/output
-# or
-python src/gallery.py --port 3000 --output-dir /path/to/output
-```
-
-The gallery displays:
-- **Run cards** with thumbnails of first and last frames
-- **Filtering** by model and mode
-- **Modal viewer** with frame-by-frame navigation
-- **Statistics** including cost, time, and frame details
-- **Playback controls** for animating through frames
-
-Open `http://localhost:8080` in your browser to view the gallery.
 
 ## Examples
 
