@@ -14,217 +14,19 @@ Run with: uv run src/generate_from_text.py "your prompt here"
 
 import argparse
 import asyncio
-import base64
-import io
-import os
+import json
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
-import httpx
-import yaml
-from PIL import Image
-
-# Available models for image generation
-MODELS = {
-    "flux-pro": "black-forest-labs/flux.2-pro",
-    "gemini-flash-image": "google/gemini-2.5-flash-image",
-    "riverflow": "sourceful/riverflow-v2-standard-preview",
-}
-
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1/responses"
-
-
-def load_api_key() -> str:
-    """Load OpenRouter API key from environment or secrets.yaml."""
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if api_key:
-        return api_key
-
-    secrets_path = Path(__file__).parent.parent / "secrets.yaml"
-    if secrets_path.exists():
-        with open(secrets_path) as f:
-            secrets = yaml.safe_load(f)
-            api_key = secrets.get("openrouter_api_key")
-            if api_key:
-                return api_key
-
-    raise ValueError(
-        "No API key found. Set OPENROUTER_API_KEY env var or add to secrets.yaml"
-    )
-
-
-async def fetch_image_url(url: str) -> str:
-    """Fetch an image from URL and return as data URI."""
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, follow_redirects=True)
-        response.raise_for_status()
-        content_type = response.headers.get("content-type", "image/png")
-        encoded = base64.b64encode(response.content).decode("utf-8")
-        return f"data:{content_type};base64,{encoded}"
-
-
-def save_data_uri(data_uri: str, output_path: Path) -> int:
-    """Save a data URI as a PNG file. Returns file size in bytes."""
-    _, encoded = data_uri.split(",", 1)
-    image_data = base64.b64decode(encoded)
-    image = Image.open(io.BytesIO(image_data))
-    file_path = output_path.with_suffix(".png")
-    image.save(file_path, format="PNG", optimize=False)
-    return len(image_data)
-
-
-async def generate_image_from_text(
-    prompt: str,
-    model: str,
-    api_key: str,
-    verbose: bool = False,
-) -> tuple[str | None, dict]:
-    """
-    Generate an image from text using the OpenRouter responses API.
-
-    Returns:
-        Tuple of (image_data_uri or None, usage_dict)
-    """
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com/ai-feedback-loops",
-        "X-Title": "Text to Image Generator",
-    }
-
-    payload = {
-        "model": model,
-        "input": [
-            {
-                "type": "message",
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": f"Generate an image: {prompt}",
-                    },
-                ],
-            }
-        ],
-        "temperature": 0.7,
-        "top_p": 0.9,
-    }
-
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        try:
-            response = await client.post(
-                OPENROUTER_API_URL,
-                headers=headers,
-                json=payload,
-            )
-
-            if response.status_code != 200:
-                error_text = response.text
-                print(f"  ❌ API Error ({response.status_code}): {error_text[:200]}")
-                return None, {}
-
-            result = response.json()
-            
-            if verbose:
-                import json
-                print(f"  📡 Response keys: {list(result.keys())}")
-                if result.get("usage"):
-                    print(f"  📊 Usage: {json.dumps(result['usage'], indent=2)}")
-
-            usage = result.get("usage", {})
-
-            # Extract the generated image from the response
-            output = result.get("output", [])
-            for item in output:
-                item_type = item.get("type")
-                
-                if item_type == "message":
-                    content = item.get("content", [])
-                    for part in content:
-                        part_type = part.get("type")
-                        if part_type in ("output_image", "image"):
-                            image_url = part.get("image_url") or part.get("url")
-                            if image_url:
-                                if image_url.startswith("http"):
-                                    return await fetch_image_url(image_url), usage
-                                return image_url, usage
-
-                        if part_type == "image" and part.get("data"):
-                            mime = part.get("mime_type", "image/png")
-                            return f"data:{mime};base64,{part['data']}", usage
-
-                        if part_type == "image_generation_call" and part.get("result"):
-                            img_result = part.get("result")
-                            if isinstance(img_result, str):
-                                if img_result.startswith("http"):
-                                    return await fetch_image_url(img_result), usage
-                                return img_result, usage
-
-                if item_type == "image_generation_call":
-                    img_result = item.get("result")
-                    if img_result:
-                        if isinstance(img_result, str):
-                            if img_result.startswith("http"):
-                                return await fetch_image_url(img_result), usage
-                            return img_result, usage
-
-            # Check for direct image in result
-            if "image" in result:
-                img = result["image"]
-                if isinstance(img, str):
-                    if img.startswith("http"):
-                        return await fetch_image_url(img), usage
-                    elif img.startswith("data:"):
-                        return img, usage
-
-            # Check output_text for a URL
-            output_text = result.get("output_text", "")
-            if output_text:
-                import re
-                url_pattern = r'https?://[^\s<>"\']+\.(?:png|jpg|jpeg|gif|webp)[^\s<>"\']*'
-                urls = re.findall(url_pattern, output_text, re.IGNORECASE)
-                if urls:
-                    return await fetch_image_url(urls[0]), usage
-
-            # Check for error
-            error = result.get("error")
-            if error:
-                error_msg = error.get("message", str(error)) if isinstance(error, dict) else str(error)
-                print(f"  ⚠️  Model error: {error_msg[:150]}")
-                return None, usage
-
-            # Extract text response
-            model_text = output_text
-            if not model_text:
-                for item in output:
-                    if item.get("type") == "message":
-                        content = item.get("content", [])
-                        for part in content:
-                            if part.get("type") in ("output_text", "text"):
-                                model_text = part.get("text", "")
-                                break
-                        if model_text:
-                            break
-
-            print(f"  ⚠️  No image generated.")
-            if model_text:
-                text_preview = model_text[:200] + "..." if len(model_text) > 200 else model_text
-                print(f"      Model said: {text_preview}")
-            return None, usage
-
-        except httpx.TimeoutException:
-            print("  ❌ Request timed out")
-            return None, {}
-        except Exception as e:
-            print(f"  ❌ Error: {e}")
-            return None, {}
+from imageloop import api, settings, storage
 
 
 async def main_async(args):
     """Generate images from all models."""
     try:
-        api_key = load_api_key()
+        api_key = storage.load_api_key()
     except ValueError as e:
         print(f"❌ {e}")
         return 1
@@ -232,11 +34,15 @@ async def main_async(args):
     prompt = args.prompt
     print(f"📝 Prompt: {prompt}\n")
 
+    # Load settings
+    cfg = settings.load_settings()
+    models_dict = cfg.get("models", {})
+
     # Determine which models to use
     if args.model:
         model_list = [args.model]
     else:
-        model_list = list(MODELS.keys())
+        model_list = list(models_dict.keys())
 
     # Set up output directory
     timestamp = datetime.now().strftime("%m%d_%H%M%S")
@@ -244,61 +50,123 @@ async def main_async(args):
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"📁 Output: {output_dir}\n")
 
-    results = {}
+    created_at = datetime.now().isoformat()
+    start_time = time.time()
+    results_list = []
     
     for model_short in model_list:
-        model_full = MODELS.get(model_short, model_short)
+        model_full = settings.get_model(model_short, cfg)
         print(f"🤖 {model_short} ({model_full})")
         
-        image_data, usage = await generate_image_from_text(
+        # Track timing for this model
+        model_start_time = time.time()
+        
+        gen_result = await api.generate_from_text(
             prompt=prompt,
             model=model_full,
             api_key=api_key,
             verbose=args.verbose,
         )
         
-        if image_data:
+        model_duration = time.time() - model_start_time
+        usage = gen_result.get("usage", {})
+        
+        result_entry = {
+            "model_short": model_short,
+            "model_full": model_full,
+            "success": gen_result.get("success", False),
+            "duration_seconds": round(model_duration, 2),
+            "usage": {
+                "input_tokens": usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0),
+                "output_tokens": usage.get("output_tokens", 0) or usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0),
+                "cost": usage.get("cost", 0.0),
+            },
+        }
+        
+        if gen_result["success"]:
             output_path = output_dir / f"{model_short}"
-            file_size = save_data_uri(image_data, output_path)
+            file_size = storage.save_data_uri(gen_result["image"], output_path)
             print(f"  ✅ Saved: {output_path}.png ({file_size // 1024}KB)")
-            results[model_short] = {
-                "success": True,
-                "path": f"{output_path}.png",
-                "size": file_size,
-                "cost": usage.get("cost", 0),
-            }
+            result_entry["file"] = f"{model_short}.png"
+            result_entry["file_size_bytes"] = file_size
+            result_entry["cost"] = usage.get("cost", 0.0)
         else:
             print(f"  ❌ Failed to generate image")
-            results[model_short] = {"success": False}
+            result_entry["cost"] = 0.0
+            if gen_result.get("error"):
+                result_entry["error"] = str(gen_result["error"])
         
+        results_list.append(result_entry)
         print()
+
+    # Calculate totals
+    total_time = time.time() - start_time
+    successful = sum(1 for r in results_list if r.get("success"))
+    failed = len(results_list) - successful
+    total_cost = sum(r.get("cost", 0) for r in results_list)
+    
+    # Determine status
+    if failed == 0:
+        status = "completed"
+    elif successful == 0:
+        status = "failed"
+    else:
+        status = "partial"
+
+    # Create JSON structure
+    run_data = {
+        "summary": {
+            "created": created_at,
+            "type": "text-to-image",
+            "prompt": prompt,
+            "models_requested": model_list,
+            "models_successful": successful,
+            "models_failed": failed,
+            "total_cost": f"${total_cost:.4f}",
+            "total_time": f"{total_time:.1f}s",
+            "status": status,
+        },
+        "config": {
+            "prompt": prompt,
+            "output_dir": str(output_dir),
+        },
+        "results": results_list,
+    }
+
+    # Save JSON artifact
+    run_json_path = output_dir / "run.json"
+    with open(run_json_path, "w") as f:
+        json.dump(run_data, f, indent=2)
 
     # Summary
     print("=" * 50)
     print("📊 Summary")
     print("=" * 50)
     
-    successful = sum(1 for r in results.values() if r.get("success"))
-    total_cost = sum(r.get("cost", 0) for r in results.values())
-    
-    print(f"✅ Successful: {successful}/{len(results)}")
+    print(f"✅ Successful: {successful}/{len(results_list)}")
     print(f"💰 Total cost: ${total_cost:.4f}")
+    print(f"⏱️  Total time: {total_time:.1f}s")
     print(f"📁 Output directory: {output_dir}")
 
-    # Save prompt to file
+    # Save prompt to file (keep for backward compatibility)
     prompt_file = output_dir / "prompt.txt"
     with open(prompt_file, "w") as f:
-        f.write(f"Generated: {datetime.now().isoformat()}\n")
+        f.write(f"Generated: {created_at}\n")
         f.write(f"Prompt: {prompt}\n\n")
         f.write("Results:\n")
-        for model, result in results.items():
+        for result in results_list:
             status = "✅" if result.get("success") else "❌"
-            f.write(f"  {status} {model}\n")
+            f.write(f"  {status} {result['model_short']}\n")
     
     return 0 if successful > 0 else 1
 
 
 def main():
+    # Load settings for model list
+    cfg = settings.load_settings()
+    models_dict = cfg.get("models", {})
+    
     parser = argparse.ArgumentParser(
         description="Generate images from text using multiple AI models",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -310,18 +178,26 @@ Examples:
   # Generate with a specific model
   uv run src/generate_from_text.py "A futuristic city" --model flux-pro
 
+  # Read prompt from file
+  uv run src/generate_from_text.py --file prompt.txt --model flux-pro
+
+  # Read prompt from stdin (pipe or redirect)
+  echo "A sunset over mountains" | uv run src/generate_from_text.py --model flux-pro
+  cat prompt.txt | uv run src/generate_from_text.py --model flux-pro
+
 Available models:
-  {', '.join(f'{k} ({v})' for k, v in MODELS.items())}
+  {', '.join(f'{k} ({v})' for k, v in models_dict.items())}
 """
     )
 
     parser.add_argument(
         "prompt",
-        help="Text description of the image to generate",
+        nargs="?",
+        help="Text description of the image to generate (or use --file or pipe from stdin)",
     )
     parser.add_argument(
         "--model", "-m",
-        help=f"Specific model to use. If not specified, uses all models. Options: {', '.join(MODELS.keys())}",
+        help=f"Specific model to use. If not specified, uses all models. Options: {', '.join(models_dict.keys())}",
     )
     parser.add_argument(
         "--output", "-o",
@@ -338,18 +214,41 @@ Available models:
         action="store_true",
         help="List available models and exit",
     )
+    parser.add_argument(
+        "--file", "-f",
+        type=Path,
+        help="Read prompt from file instead of argument or stdin",
+    )
 
     args = parser.parse_args()
 
     if args.list_models:
         print("Available models:\n")
-        for short, full in MODELS.items():
+        for short, full in models_dict.items():
             print(f"  {short:20} -> {full}")
         return 0
+
+    # Determine prompt source: file > argument > stdin
+    prompt = args.prompt
+    if not prompt:
+        if args.file:
+            if not args.file.exists():
+                parser.error(f"File not found: {args.file}")
+            prompt = args.file.read_text().strip()
+        elif not sys.stdin.isatty():
+            # Read from stdin if it's piped/redirected
+            prompt = sys.stdin.read().strip()
+        else:
+            parser.error("prompt is required (provide as argument, use --file, or pipe from stdin)")
+    
+    if not prompt:
+        parser.error("prompt cannot be empty")
+    
+    # Update args with the resolved prompt
+    args.prompt = prompt
 
     return asyncio.run(main_async(args))
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
