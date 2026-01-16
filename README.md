@@ -1,15 +1,18 @@
 # Image Loop Generator
 
-A CLI tool that creates animations by iteratively transforming images through AI. Feed it an image and a transformation prompt, and it runs multiple passes through an AI image model, feeding each output back as the next input. The result is a sequence of progressively transformed frames, compiled into a video.
+A CLI tool that creates animations by iteratively transforming images using AI models via OpenRouter. Give it an image and a "mode" (a preset prompt), and it runs multiple passes through an AI image model, passing each output back as the next input. The result is a sequence of progressively transformed frames, compiled into a video or GIF.
 
-This solution is loosely based on [nano-banana-loop](https://github.com/radames/nano-banana-loop) but uses [OpenRouter](https://openrouter.ai/) to access various [image generation models](https://openrouter.ai/models?fmt=cards&input_modalities=image&output_modalities=image&order=newest) (instead of fal.ai), and adds new modes and features.
+I developed this as a way to research different image models to identify biases and limitations. As images are progressively transformed you can also observe artifacts and distortions that emerge.
+
+This project is loosely based on [nano-banana-loop](https://github.com/radames/nano-banana-loop) but uses [OpenRouter](https://openrouter.ai/) to access various [image generation models](https://openrouter.ai/models?fmt=cards&input_modalities=image&output_modalities=image&order=newest) (instead of fal.ai), and adds new modes and features.
 
 ## Flow
 
-1. **Input**: You provide an image and a transformation mode (or custom prompt)
-2. **Iteration**: The tool sends the image to an AI model with the transformation prompt
+1. **Input**: provide an image and a preset mode (or custom prompt)
+2. **Iteration**: the image is passed to the model with the transformation prompt
 3. **Feedback Loop**: Each generated frame becomes the input for the next frame
 4. **Output**: The sequence of frames is compiled into a video or GIF
+5. **Review**: The gallery displays all runs in a simple web interface
 
 Each run creates a timestamped directory with all frames, metadata, and generated animations.
 
@@ -18,38 +21,75 @@ Each run creates a timestamped directory with all frames, metadata, and generate
 ### Requirements
 
 - Python 3.11+
-- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip with virtual environment
 - ffmpeg (for video generation)
 - OpenRouter API key
 
 ### Setup
 
 1. Clone this repository
-2. Add your OpenRouter API key to `secrets.yaml`:
+2. Install dependencies (choose one method below)
+3. Add your OpenRouter API key to `secrets.yaml`:
    ```yaml
    openrouter_api_key: sk-or-v1-your-key-here
    ```
    Or set the `OPENROUTER_API_KEY` environment variable.
 
+#### Installation Methods
+
+**Option 1: Using uv (Recommended)**
+
+`uv` automatically manages dependencies and Python versions:
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# No additional setup needed - dependencies are managed automatically
+```
+
+**Option 2: Using pip with virtual environment**
+
+```bash
+# Create a virtual environment
+python3 -m venv venv
+
+# Activate it
+# On macOS/Linux:
+source venv/bin/activate
+# On Windows:
+# venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+
+**Note:** The gallery (`src/gallery.py`) can run standalone but still requires dependencies for parsing run metadata. All scripts share the same dependency set.
+
 ### Basic Usage
+
+Note: With `uv`, add `uv run` to run the commands below.
 
 ```bash
 # Transform an image with a preset mode
-uv run src/image_loop.py --image photo.jpg --mode evolve --frames 10
+python src/image_loop.py --image photo.jpg --mode evolve --frames 10
 
 # Use a custom prompt
-uv run src/image_loop.py --image photo.jpg --mode custom --prompt "Age this person by 5 years"
+python src/image_loop.py --image photo.jpg --mode custom --prompt "Age this person by 5 years"
 
 # Specify model and output size
-uv run src/image_loop.py --image photo.jpg --mode album-cover --model flux-pro --size square
+python src/image_loop.py --image photo.jpg --mode album-cover --model flux-pro --size square
 
 # Continue an existing run with more frames
-uv run src/image_loop.py --continue output/run_flux-pro_evolve_1218_1234_abcd --frames 10
+python src/image_loop.py --continue output/run_flux-pro_evolve_1218_1234_abcd --frames 10
 
 # List available options
-uv run src/image_loop.py --list-modes
-uv run src/image_loop.py --list-models
+python src/image_loop.py --list-modes
+python src/image_loop.py --list-models
 ```
+
+**Note:** Make sure your virtual environment is activated when using standard Python. With `uv`, dependencies are managed automatically.
 
 
 ## Gallery
@@ -59,11 +99,16 @@ View all your generated runs in a web gallery:
 ![Gallery](docs/gallery-screenshot.png)
 
 ```bash
-# Start the gallery server (default port 8080)
+# With uv:
 uv run src/gallery.py
+
+# With standard Python:
+python src/gallery.py
 
 # Custom port and output directory
 uv run src/gallery.py --port 3000 --output-dir /path/to/output
+# or
+python src/gallery.py --port 3000 --output-dir /path/to/output
 ```
 
 The gallery displays:
@@ -82,7 +127,11 @@ Open `http://localhost:8080` in your browser to view the gallery.
 Transform a street scene by progressively adding unexpected elements.
 
 ```bash
+# With uv:
 uv run src/image_loop.py --image east-village.jpg --mode bizarre --model flux-pro --frames 15
+
+# With standard Python:
+python src/image_loop.py --image east-village.jpg --mode bizarre --model flux-pro --frames 15
 ```
 
 ![East Village Bizarre](examples/east-village-bizarre-collage.png)
@@ -97,6 +146,7 @@ Show a scene evolving moment by moment.
 
 ```bash
 uv run src/image_loop.py --image cats-turkey.jpg --mode next --model flux-pro --frames 20 --size landscape
+# or: python src/image_loop.py --image cats-turkey.jpg --mode next --model flux-pro --frames 20 --size landscape
 ```
 
 ![Cats Turkey](examples/cats-turkey-collage.png)
@@ -111,6 +161,7 @@ Push an image toward a political aesthetic (using Riverflow model).
 
 ```bash
 uv run src/image_loop.py --image cats.png --mode politic-right --model riverflow --frames 10 --size square
+# or: python src/image_loop.py --image cats.png --mode politic-right --model riverflow --frames 10 --size square
 ```
 
 ![Rightwing Cats](examples/rightwing-cats-collage.png)
@@ -125,6 +176,7 @@ Transform a classical painting with increasingly surreal elements.
 
 ```bash
 uv run src/image_loop.py --image painting.jpg --mode bizarre --model riverflow --frames 20 --size square
+# or: python src/image_loop.py --image painting.jpg --mode bizarre --model riverflow --frames 20 --size square
 ```
 
 ![Painting Bizarre](examples/painting-bizarre-collage.png)
@@ -183,7 +235,11 @@ Use `--mode custom --prompt "your prompt"` for custom transformations.
 Run `--list-models` to fetch available image generation models from OpenRouter with current pricing:
 
 ```bash
+# With uv:
 uv run src/image_loop.py --list-models
+
+# With standard Python:
+python src/image_loop.py --list-models
 ```
 
 **Configured shortcuts:**
@@ -261,7 +317,11 @@ Example `run.json` structure:
 Generate a single image from text (without the loop):
 
 ```bash
+# With uv:
 uv run src/generate_from_text.py "A futuristic cityscape at sunset" --model flux-pro --output city.png
+
+# With standard Python:
+python src/generate_from_text.py "A futuristic cityscape at sunset" --model flux-pro --output city.png
 ```
 
 Outputs from text-to-image generation will also be displayed in the gallery.
@@ -273,7 +333,10 @@ Generate a grid collage from a completed run:
 
 ```bash
 # 3x3 collage (default medium size: 1600x1200)
+# With uv:
 uv run src/collage.py output/run_flux-pro_evolve_1218_1234_abcd --grid 3x3
+# With standard Python:
+python src/collage.py output/run_flux-pro_evolve_1218_1234_abcd --grid 3x3
 
 # 4x4 large collage
 uv run src/collage.py output/run_flux-pro_evolve_1218_1234_abcd --grid 4x4 --size large
@@ -354,7 +417,7 @@ The codebase is modularized into focused modules:
 
 ### Contributing
 
-PRs welcome. The codebase uses inline dependencies managed by uv.
+PRs welcome. The codebase uses inline dependencies (PEP 723) which work with `uv`, but a `requirements.txt` is also provided for standard pip workflows.
 
 When contributing:
 - Follow the existing modular structure
