@@ -32,17 +32,14 @@ This project includes a simple web gallery to view all generated runs:
 ![Gallery](docs/gallery-screenshot.png)
 
 ```bash
-# With uv:
-uv run src/gallery.py
-
-# With standard Python:
+# Start the gallery server (default port 8080)
 python src/gallery.py
 
 # Custom port and output directory
-uv run src/gallery.py --port 3000 --output-dir /path/to/output
-# or
 python src/gallery.py --port 3000 --output-dir /path/to/output
 ```
+
+**Note:** With `uv`, use `uv run src/gallery.py` instead of `python src/gallery.py`.
 
 The gallery displays:
 - **Run cards** with thumbnails of first and last frames
@@ -83,6 +80,7 @@ Open `http://localhost:8080` in your browser to view the gallery.
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # No additional setup needed - dependencies are managed automatically
+# Use "uv run" instead of "python" for all commands (e.g., "uv run src/image_loop.py")
 ```
 
 **Option 2: Using pip with virtual environment**
@@ -106,8 +104,6 @@ pip install -r requirements.txt
 
 ### Basic Usage
 
-Note: With `uv`, add `uv run` to run the commands below.
-
 ```bash
 # Transform an image with a preset mode
 python src/image_loop.py --image photo.jpg --mode evolve --frames 10
@@ -126,7 +122,7 @@ python src/image_loop.py --list-modes
 python src/image_loop.py --list-models
 ```
 
-**Note:** Make sure your virtual environment is activated when using standard Python. With `uv`, dependencies are managed automatically.
+**Note:** Make sure your virtual environment is activated when using standard Python. With `uv`, use `uv run` instead of `python` (e.g., `uv run src/image_loop.py`).
 
 ## Examples
 
@@ -137,10 +133,6 @@ Here's a few samples. See [examples](docs/examples.md) for more.
 Transform a street scene by progressively adding unexpected elements.
 
 ```bash
-# With uv:
-uv run src/image_loop.py --image east-village.jpg --mode bizarre --model flux-pro --frames 15
-
-# With standard Python:
 python src/image_loop.py --image east-village.jpg --mode bizarre --model flux-pro --frames 15
 ```
 
@@ -155,8 +147,7 @@ https://github.com/somebox/ai-feedback-loops/raw/refs/heads/main/examples/east-v
 Push an image toward a political aesthetic (using Riverflow model).
 
 ```bash
-uv run src/image_loop.py --image cats.png --mode politic-right --model riverflow --frames 10 --size square
-# or: python src/image_loop.py --image cats.png --mode politic-right --model riverflow --frames 10 --size square
+python src/image_loop.py --image cats.png --mode politic-right --model riverflow --frames 10 --size square
 ```
 
 ![Rightwing Cats](examples/rightwing-cats-collage.png)
@@ -216,10 +207,6 @@ Use `--mode custom --prompt "your prompt"` for custom transformations.
 Run `--list-models` to fetch available image generation models from OpenRouter with current pricing:
 
 ```bash
-# With uv:
-uv run src/image_loop.py --list-models
-
-# With standard Python:
 python src/image_loop.py --list-models
 ```
 
@@ -305,10 +292,6 @@ Example `run.json` structure:
 Generate a single image from text (without the loop):
 
 ```bash
-# With uv:
-uv run src/generate_from_text.py "A futuristic cityscape at sunset" --model flux-pro --output city.png
-
-# With standard Python:
 python src/generate_from_text.py "A futuristic cityscape at sunset" --model flux-pro --output city.png
 ```
 
@@ -321,16 +304,13 @@ Generate a grid collage from a completed run:
 
 ```bash
 # 3x3 collage (default medium size: 1600x1200)
-# With uv:
-uv run src/collage.py output/run_flux-pro_evolve_1218_1234_abcd --grid 3x3
-# With standard Python:
 python src/collage.py output/run_flux-pro_evolve_1218_1234_abcd --grid 3x3
 
 # 4x4 large collage
-uv run src/collage.py output/run_flux-pro_evolve_1218_1234_abcd --grid 4x4 --size large
+python src/collage.py output/run_flux-pro_evolve_1218_1234_abcd --grid 4x4 --size large
 
 # Custom output path
-uv run src/collage.py output/run_flux-pro_evolve_1218_1234_abcd --grid 3x3 -o my_collage.png
+python src/collage.py output/run_flux-pro_evolve_1218_1234_abcd --grid 3x3 -o my_collage.png
 ```
 
 | Option | Description |
