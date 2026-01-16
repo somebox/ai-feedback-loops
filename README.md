@@ -150,21 +150,6 @@ https://github.com/somebox/ai-feedback-loops/raw/refs/heads/main/examples/east-v
 
 ---
 
-### Cats & Turkey → What Happens Next
-
-Show a scene evolving moment by moment.
-
-```bash
-uv run src/image_loop.py --image cats-turkey.jpg --mode next --model flux-pro --frames 20 --size landscape
-# or: python src/image_loop.py --image cats-turkey.jpg --mode next --model flux-pro --frames 20 --size landscape
-```
-
-![Cats Turkey](examples/cats-turkey-collage.png)
-
-https://github.com/somebox/ai-feedback-loops/raw/refs/heads/main/examples/cats-turkey.mp4
-
----
-
 ### Cats → Political Right
 
 Push an image toward a political aesthetic (using Riverflow model).
@@ -180,20 +165,6 @@ https://github.com/somebox/ai-feedback-loops/raw/refs/heads/main/examples/rightw
 
 ---
 
-### Classical Painting → Bizarre
-
-Transform a classical painting with increasingly surreal elements.
-
-```bash
-uv run src/image_loop.py --image painting.jpg --mode bizarre --model riverflow --frames 20 --size square
-# or: python src/image_loop.py --image painting.jpg --mode bizarre --model riverflow --frames 20 --size square
-```
-
-![Painting Bizarre](examples/painting-bizarre-collage.png)
-
-https://github.com/somebox/ai-feedback-loops/raw/refs/heads/main/examples/painting-bizarre.mp4
-
----
 ## Command-Line Options
 
 ### Core Options
