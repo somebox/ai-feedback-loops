@@ -34,6 +34,9 @@ class RunLog:
             "fps": None,
             "output_format": None,
             "command_line": None,
+            # Prompt loop specific
+            "describe_mode": None,
+            "describe_prompt": None,
         }
         
         # Cumulative stats (across all sessions)
@@ -105,14 +108,52 @@ class RunLog:
         duration_seconds: float = None,
         error: str = None,
         model_text: str = None,
+        # Prompt loop fields
+        description: str = None,
+        description_file: str = None,
+        describe_usage: dict = None,
+        describe_duration_seconds: float = None,
     ):
-        """Log details for a single frame generation."""
+        """Log details for a single frame generation.
+        
+        For prompt-loop mode, each frame includes both the description step
+        (image-to-text) and the render step (text-to-image).
+        """
         frame_entry = {
             "frame_number": frame_number,
             "timestamp": datetime.now().isoformat(),
             "success": success,
             "duration_seconds": duration_seconds,
         }
+        
+        # Prompt loop: description from image-to-text step
+        # Store full description - it's needed for the render step and gallery display
+        if description is not None:
+            frame_entry["description"] = description
+        if description_file:
+            frame_entry["description_file"] = description_file
+        if describe_usage:
+            frame_entry["describe_usage"] = {
+                "input_tokens": describe_usage.get("input_tokens", 0) or describe_usage.get("prompt_tokens", 0),
+                "output_tokens": describe_usage.get("output_tokens", 0) or describe_usage.get("completion_tokens", 0),
+                "total_tokens": describe_usage.get("total_tokens", 0),
+                "cost": describe_usage.get("cost", 0.0),
+            }
+            # Add describe usage to session and cumulative stats
+            if self._current_session:
+                self._current_session["input_tokens"] += frame_entry["describe_usage"]["input_tokens"]
+                self._current_session["output_tokens"] += frame_entry["describe_usage"]["output_tokens"]
+                self._current_session["total_tokens"] += frame_entry["describe_usage"]["total_tokens"]
+                self._current_session["cost"] += frame_entry["describe_usage"]["cost"]
+                self._current_session["api_calls"] += 1
+            
+            self.stats["input_tokens"] += frame_entry["describe_usage"]["input_tokens"]
+            self.stats["output_tokens"] += frame_entry["describe_usage"]["output_tokens"]
+            self.stats["total_tokens"] += frame_entry["describe_usage"]["total_tokens"]
+            self.stats["total_cost"] += frame_entry["describe_usage"]["cost"]
+            self.stats["api_calls"] += 1
+        if describe_duration_seconds is not None:
+            frame_entry["describe_duration_seconds"] = describe_duration_seconds
         
         if file_path:
             frame_entry["file"] = str(file_path)

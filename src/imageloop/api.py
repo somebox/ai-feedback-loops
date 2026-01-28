@@ -438,6 +438,136 @@ async def generate_from_text(
             return make_result(False, error=str(e))
 
 
+async def describe_image(
+    image_data_uri: str,
+    model: str,
+    api_key: str,
+    prompt: str = "Describe this image in detail, including the subject matter, composition, colors, lighting, mood, and any notable details.",
+    temperature: float = 0.7,
+    top_p: float = 0.9,
+    verbose: bool = False,
+    timeout: float = 120.0,
+) -> dict:
+    """
+    Generate a text description of an image using a vision-capable model.
+
+    Returns:
+        Dict with keys:
+            - success: bool
+            - text: str | None (the description)
+            - usage: dict (token/cost info)
+            - response: dict (raw API response metadata)
+            - error: str | None
+            - duration: float (seconds)
+    """
+    start_time = time.time()
+    
+    def make_result(success, text=None, usage=None, response=None, error=None):
+        return {
+            "success": success,
+            "text": text,
+            "usage": usage or {},
+            "response": response or {},
+            "error": error,
+            "duration": time.time() - start_time,
+        }
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/ai-feedback-loops",
+        "X-Title": "Image Description Generator",
+    }
+
+    payload = {
+        "model": model,
+        "input": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_image",
+                        "image_url": image_data_uri,
+                        "detail": "high",
+                    },
+                    {
+                        "type": "input_text",
+                        "text": prompt,
+                    },
+                ],
+            }
+        ],
+        "temperature": temperature,
+        "top_p": top_p,
+    }
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        try:
+            response = await client.post(
+                OPENROUTER_API_URL,
+                headers=headers,
+                json=payload,
+            )
+
+            if response.status_code != 200:
+                error_text = response.text
+                print(f"\n❌ API Error ({response.status_code}): {error_text[:200]}")
+                return make_result(False, error=f"HTTP {response.status_code}: {error_text[:200]}")
+
+            result = response.json()
+
+            if verbose:
+                import json
+                print(f"\n📡 Describe API Response keys: {list(result.keys())}")
+                if result.get("usage"):
+                    print(f"📊 Usage: {json.dumps(result['usage'], indent=2)}")
+
+            usage = result.get("usage", {})
+
+            # Extract text from the response
+            # Try output_text first (common format)
+            output_text = result.get("output_text", "")
+            
+            if not output_text:
+                # Look in output array for message content
+                output = result.get("output", [])
+                for item in output:
+                    if item.get("type") == "message":
+                        content = item.get("content", [])
+                        for part in content:
+                            part_type = part.get("type")
+                            if part_type in ("output_text", "text"):
+                                output_text = part.get("text", "")
+                                if output_text:
+                                    break
+                        if output_text:
+                            break
+
+            if output_text:
+                if verbose:
+                    preview = output_text[:200] + "..." if len(output_text) > 200 else output_text
+                    print(f"📝 Description: {preview}")
+                return make_result(True, text=output_text, usage=usage, response=result)
+
+            # Check for error in response
+            error = result.get("error")
+            if error:
+                error_msg = error.get("message", str(error)) if isinstance(error, dict) else str(error)
+                print(f"\n⚠️  Model error: {error_msg[:150]}")
+                return make_result(False, usage=usage, response=result, error=error_msg)
+
+            print(f"\n⚠️  No text in response")
+            return make_result(False, usage=usage, response=result, error="No text in response")
+
+        except httpx.TimeoutException:
+            print("\n❌ Request timed out")
+            return make_result(False, error="Request timed out")
+        except Exception as e:
+            print(f"\n❌ Error: {e}")
+            return make_result(False, error=str(e))
+
+
 def format_price(value: float, unit: str = "") -> str:
     """Format a price value nicely."""
     if value == 0:

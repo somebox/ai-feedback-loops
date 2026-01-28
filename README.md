@@ -16,13 +16,20 @@ The project was inspired by [nano-banana-loop](https://github.com/radames/nano-b
 
 ## Flow
 
+**Standard mode:**
 1. **Input**: provide an image and a preset mode (or custom prompt)
 2. **Iteration**: the image is passed to the model with the transformation prompt
 3. **Feedback Loop**: Each generated frame becomes the input for the next frame
 4. **Output**: The sequence of frames is compiled into a video or GIF
-5. **Review**: The gallery displays all runs in a simple web interface
 
-Each run creates a timestamped directory with all frames, metadata, and generated animations.
+**Prompt loop mode** (alternative):
+1. **Input**: provide an image
+2. **Describe**: a vision model describes the image as text
+3. **Render**: the text description is rendered as a new image (no image reference)
+4. **Feedback Loop**: The rendered image is described and re-rendered
+5. **Output**: Frames and descriptions compiled into video/GIF
+
+Each run creates a timestamped directory with all frames, metadata, and generated animations. The gallery displays all runs in a web interface.
 
 
 ## Gallery
@@ -156,6 +163,69 @@ https://github.com/somebox/ai-feedback-loops/raw/refs/heads/main/examples/rightw
 
 ---
 
+## Prompt Loop Mode
+
+Prompt loop is an alternative generation mode that creates a "telephone game" effect with images. Instead of passing the image directly to the model with a transformation prompt, it:
+
+1. **Describes** the current image using a vision model (image → text)
+2. **Renders** a new image from that description alone (text → image)
+3. **Repeats** with the rendered image as the new input
+
+This creates drift and transformation through the lossy process of describing and re-rendering, rather than through explicit prompts.
+
+```bash
+# Basic prompt loop
+python src/image_loop.py --image photo.jpg --prompt-loop --frames 10
+
+# With a specific describe style
+python src/image_loop.py --image photo.jpg --prompt-loop --describe-mode artistic --frames 10
+
+# Custom description prompt
+python src/image_loop.py --image photo.jpg --prompt-loop --describe-mode custom \
+  --describe-prompt "Describe only the colors and shapes" --frames 5
+```
+
+### Prompt Loop Options
+
+| Option | Description |
+|--------|-------------|
+| `--prompt-loop` | Enable prompt loop mode |
+| `--describe-mode` | How to describe images: detailed (default), artistic, simple, technical, narrative, emotional, or custom |
+| `--describe-prompt` | Custom describe prompt (required when describe-mode is custom) |
+
+### Describe Modes
+
+| Mode | Description |
+|------|-------------|
+| `detailed` | Full description including subject, composition, colors, lighting, mood |
+| `artistic` | Art director perspective focusing on style and technique |
+| `simple` | Brief, minimal description |
+| `technical` | Technical analysis of visual elements |
+| `narrative` | Story-telling perspective |
+| `emotional` | Focus on mood and atmosphere |
+
+### Output Structure
+
+Prompt loop runs include a `descriptions/` folder with the text generated for each frame:
+
+```
+output/run_nano-banana_promptloop_0124_1530_abc1/
+├── images/
+│   ├── frame_000.png  (input)
+│   ├── frame_001.png  (rendered from description)
+│   └── ...
+├── descriptions/
+│   ├── frame_001.txt  (description of frame_000)
+│   ├── frame_002.txt  (description of frame_001)
+│   └── ...
+├── run.json
+└── animation.mp4
+```
+
+**Note:** Prompt loop requires a multimodal model that supports both vision (image→text) and image generation (text→image). The default is `nano-banana` (Gemini). Models like `flux-pro` only support image generation and won't work with prompt loop.
+
+---
+
 ## Command-Line Options
 
 ### Core Options
@@ -165,6 +235,7 @@ https://github.com/somebox/ai-feedback-loops/raw/refs/heads/main/examples/rightw
 | `--image`, `-i` | Input image path (required for new runs) |
 | `--mode`, `-m` | Transformation mode (see [Available Modes](#available-modes)) or `custom` |
 | `--prompt`, `-p` | Custom prompt (required when mode is `custom`) |
+| `--prompt-loop` | Enable prompt loop mode (see [Prompt Loop Mode](#prompt-loop-mode)) |
 | `--frames`, `-n` | Number of frames to generate (default: 10) |
 | `--model` | Model to use (default: flux-pro, see [Available Models](#available-models)) |
 | `--size`, `-s` | Output size: auto, preserve, custom, or preset (default: auto, see [Output Sizes](#output-sizes)) |
@@ -183,6 +254,8 @@ https://github.com/somebox/ai-feedback-loops/raw/refs/heads/main/examples/rightw
 | `--verbose`, `-v` | Show detailed API responses |
 | `--list-modes` | List all available transformation modes |
 | `--list-models` | List available image generation models from OpenRouter |
+| `--describe-mode` | Prompt loop: how to describe images (default: detailed) |
+| `--describe-prompt` | Prompt loop: custom describe prompt |
 
 **Note:** Parameter support varies by model. Use `--list-models` to see which parameters each model supports.
 

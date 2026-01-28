@@ -199,6 +199,100 @@ async def test_generate_image_returns_result_dict(landscape_image):
         assert "duration" in result
 
 
+@pytest.mark.asyncio
+async def test_describe_image_returns_text(landscape_image):
+    """describe_image extracts text from API response."""
+    from imageloop import api, storage
+    
+    data_uri = storage.image_to_data_uri(landscape_image)
+    
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "output": [
+            {
+                "type": "message",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "A landscape image with mountains and sky.",
+                    }
+                ],
+            }
+        ],
+        "usage": {"cost": 0.001, "total_tokens": 50},
+        "id": "test-id",
+    }
+    
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
+        
+        result = await api.describe_image(
+            image_data_uri=data_uri,
+            model="test-model",
+            api_key="test-key",
+            prompt="Describe this image",
+        )
+        
+        assert result["success"] is True
+        assert result["text"] == "A landscape image with mountains and sky."
+        assert "duration" in result
+
+
+@pytest.mark.asyncio
+async def test_describe_image_from_output_text(landscape_image):
+    """describe_image extracts text from output_text field."""
+    from imageloop import api, storage
+    
+    data_uri = storage.image_to_data_uri(landscape_image)
+    
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "output_text": "A beautiful sunset over the ocean.",
+        "usage": {"cost": 0.001},
+    }
+    
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
+        
+        result = await api.describe_image(
+            image_data_uri=data_uri,
+            model="test-model",
+            api_key="test-key",
+        )
+        
+        assert result["success"] is True
+        assert result["text"] == "A beautiful sunset over the ocean."
+
+
+@pytest.mark.asyncio
+async def test_describe_image_no_text_fails(landscape_image):
+    """describe_image fails when no text in response."""
+    from imageloop import api, storage
+    
+    data_uri = storage.image_to_data_uri(landscape_image)
+    
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "output": [{"type": "image", "data": "base64data"}],
+        "usage": {"cost": 0.001},
+    }
+    
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
+        
+        result = await api.describe_image(
+            image_data_uri=data_uri,
+            model="test-model",
+            api_key="test-key",
+        )
+        
+        assert result["success"] is False
+        assert "No text" in result.get("error", "")
+
+
 # Live API test (uses cheap model) - marked to skip unless explicitly run
 @pytest.mark.live_api
 @pytest.mark.asyncio

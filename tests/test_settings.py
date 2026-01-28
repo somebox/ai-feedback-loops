@@ -143,3 +143,43 @@ def test_get_model_short_name_from_id():
     assert "/" not in short_name
     assert "." not in short_name
     assert len(short_name) <= 20
+
+
+def test_get_describe_prompt_returns_preset():
+    """Describe mode name returns corresponding prompt text."""
+    from imageloop import settings
+    
+    cfg = settings.load_settings()
+    
+    prompt = settings.get_describe_prompt("detailed", None, cfg)
+    assert "describe" in prompt.lower()
+    assert "detail" in prompt.lower()
+
+
+def test_get_describe_prompt_custom_mode():
+    """'custom' describe mode requires explicit prompt."""
+    from imageloop import settings
+    
+    cfg = settings.load_settings()
+    
+    # With custom prompt provided
+    prompt = settings.get_describe_prompt("custom", "My custom describe prompt", cfg)
+    assert prompt == "My custom describe prompt"
+    
+    # Without custom prompt
+    with pytest.raises(ValueError) as exc_info:
+        settings.get_describe_prompt("custom", None, cfg)
+    
+    assert "custom" in str(exc_info.value).lower()
+
+
+def test_describe_prompts_in_defaults():
+    """Default settings include describe_prompts."""
+    from imageloop import settings
+    
+    cfg = settings.load_settings()
+    
+    assert "describe_prompts" in cfg
+    assert "detailed" in cfg["describe_prompts"]
+    assert "simple" in cfg["describe_prompts"]
+    assert "artistic" in cfg["describe_prompts"]

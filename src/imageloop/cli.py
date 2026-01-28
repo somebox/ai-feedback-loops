@@ -433,9 +433,281 @@ async def cmd_continue(args, cfg: dict):
     return 0 if run_log.stats["frames_generated"] > 0 else 1
 
 
+async def cmd_generate_prompt_loop(args, cfg: dict):
+    """Prompt loop generation: image→text→image cycle for each frame."""
+    global _shutdown_requested
+    
+    # Load API key
+    try:
+        api_key = storage.load_api_key()
+    except ValueError as e:
+        print(f"❌ {e}")
+        return 1
+
+    # Resolve model name (used for both describe and render)
+    # For prompt-loop, we need a multimodal model that can do both vision and image generation
+    defaults = cfg.get("defaults", {})
+    model_arg = args.model or "nano-banana"  # Default to Gemini for prompt-loop (supports both vision + image gen)
+    model = settings.get_model(model_arg, cfg)
+    
+    # Warn if using a non-multimodal model
+    non_multimodal = ["flux-pro", "flux-klein", "seedream", "riverflow"]
+    model_short = settings.get_model_short_name(model, cfg)
+    if model_short in non_multimodal or "flux" in model.lower():
+        print(f"⚠️  Warning: {model_short} may not support image-to-text (vision).")
+        print(f"   For prompt-loop, use a multimodal model like nano-banana or nano-banana-pro.")
+    
+    print(f"🤖 Model: {model}")
+
+    # Load input image
+    input_path = Path(args.image)
+    if not input_path.exists():
+        print(f"❌ Image not found: {input_path}")
+        return 1
+
+    print(f"📷 Loading image: {input_path}")
+    current_image = storage.image_to_data_uri(input_path)
+
+    # Handle custom size
+    custom_size = None
+    if args.size == "custom":
+        if not args.width or not args.height:
+            print("❌ --size custom requires both --width and --height")
+            return 1
+        custom_size = (args.width, args.height)
+
+    # Standardize to target size for consistent frames
+    current_image, frame_size, size_name = sizing.standardize_image(current_image, args.size, custom_size)
+    print(f"📐 Standardized to {frame_size[0]}x{frame_size[1]} ({size_name})")
+
+    # Get describe prompt
+    try:
+        describe_prompt = settings.get_describe_prompt(args.describe_mode, args.describe_prompt, cfg)
+    except ValueError as e:
+        print(f"❌ {e}")
+        return 1
+
+    print(f"📝 Describe prompt: {describe_prompt[:60]}{'...' if len(describe_prompt) > 60 else ''}")
+    
+    # Fixed render prompt for prompt loop
+    render_prompt_prefix = "Render an image using this description:"
+
+    # Set up output directory
+    timestamp = datetime.now().strftime("%m%d_%H%M")
+    run_id = uuid.uuid4().hex[:4]
+    model_short = settings.get_model_short_name(model, cfg)
+
+    output_base = Path(args.output)
+    run_dir = output_base / f"run_{model_short}_promptloop_{timestamp}_{run_id}"
+    images_dir = run_dir / "images"
+    descriptions_dir = run_dir / "descriptions"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    descriptions_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"📁 Output: {run_dir}")
+
+    # Build command line for reference
+    command_line = build_command_line(args, defaults, script_name="python src/image_loop.py")
+    # Add prompt-loop specific args
+    command_line += " --prompt-loop"
+    if args.describe_mode != "detailed":
+        command_line += f" --describe-mode {args.describe_mode}"
+    if args.describe_prompt:
+        command_line += f" --describe-prompt {shlex.quote(args.describe_prompt)}"
+    
+    # Initialize run log
+    run_log = runlog.RunLog(run_dir=run_dir)
+    run_log.set_config(
+        input_image=str(input_path.absolute()),
+        model=model,
+        mode="prompt-loop",
+        prompt=f"describe: {describe_prompt[:100]}... | render: {render_prompt_prefix}",
+        describe_mode=args.describe_mode,
+        describe_prompt=describe_prompt,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        seed=args.seed,
+        size=size_name,
+        frame_dimensions={"width": frame_size[0], "height": frame_size[1]},
+        requested_frames=args.frames,
+        fps=args.fps,
+        output_format=args.format,
+        command_line=command_line,
+    )
+
+    # Save initial frame
+    initial_frame_path = images_dir / "frame_000.png"
+    storage.save_data_uri(current_image, images_dir / "frame_000")
+    print("✅ Saved initial frame (frame_000.png)")
+    
+    # Log initial frame (frame 0 is the input, not generated)
+    run_log.frames.append({
+        "frame_number": 0,
+        "timestamp": datetime.now().isoformat(),
+        "success": True,
+        "is_input": True,
+        "file": str(initial_frame_path),
+        "dimensions": {"width": frame_size[0], "height": frame_size[1]},
+    })
+
+    # Start generation session
+    run_log.start_session(is_continuation=False)
+    run_log._current_session["frames_requested"] = args.frames
+    
+    # Save initial state so we can continue if interrupted
+    run_log._auto_save()
+
+    # Generation loop
+    print(f"\n🔄 Generating {args.frames} frames (prompt loop: describe→render)...\n")
+
+    progress = tqdm(range(args.frames), desc="Generating", unit="frame")
+    interrupted = False
+
+    for i in progress:
+        # Check for shutdown request
+        if _shutdown_requested:
+            interrupted = True
+            progress.close()
+            print(f"\n⏹️  Stopping after frame {i} (interrupt requested)")
+            break
+            
+        frame_num = i + 1
+        progress.set_description(f"Frame {frame_num} (describe)")
+
+        # Step 1: Describe the current image
+        describe_result = await api.describe_image(
+            image_data_uri=current_image,
+            model=model,
+            api_key=api_key,
+            prompt=describe_prompt,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            verbose=args.verbose,
+        )
+
+        if not describe_result["success"]:
+            run_log.log_frame(
+                frame_number=frame_num,
+                success=False,
+                describe_usage=describe_result.get("usage"),
+                describe_duration_seconds=describe_result.get("duration"),
+                error=f"Describe failed: {describe_result.get('error')}",
+            )
+            progress.set_postfix({"status": "describe failed"})
+            continue
+
+        description = describe_result["text"]
+        
+        # Save description to file
+        desc_file = descriptions_dir / f"frame_{frame_num:03d}.txt"
+        desc_file.write_text(description)
+
+        progress.set_description(f"Frame {frame_num} (render)")
+
+        # Step 2: Render from the description (text-to-image, no reference image)
+        # This is the key to the "telephone game" effect - only the text is passed
+        render_prompt = f"{render_prompt_prefix}\n\n{description}"
+        
+        render_result = await api.generate_from_text(
+            prompt=render_prompt,
+            model=model,
+            api_key=api_key,
+            verbose=args.verbose,
+        )
+
+        if not render_result["success"]:
+            run_log.log_frame(
+                frame_number=frame_num,
+                success=False,
+                description=description,
+                description_file=str(desc_file),
+                describe_usage=describe_result.get("usage"),
+                describe_duration_seconds=describe_result.get("duration"),
+                usage=render_result.get("usage"),
+                api_response=render_result.get("response"),
+                duration_seconds=render_result.get("duration"),
+                error=f"Render failed: {render_result.get('error')}",
+                model_text=render_result.get("model_text"),
+            )
+            progress.set_postfix({"status": "render failed"})
+            continue
+
+        new_image = render_result["image"]
+
+        # Resize to match standard frame size (use crop to preserve aspect ratio)
+        new_image = sizing.resize_to_size(new_image, frame_size, verbose=args.verbose, mode="crop")
+
+        # Save frame
+        frame_stem = images_dir / f"frame_{frame_num:03d}"
+        frame_path = frame_stem.with_suffix(".png")
+        try:
+            file_size = storage.save_data_uri(new_image, frame_stem)
+            
+            # Calculate total duration for this frame (describe + render)
+            total_duration = (describe_result.get("duration", 0) or 0) + (render_result.get("duration", 0) or 0)
+            
+            # Log successful frame (auto-saves after each frame)
+            run_log.log_frame(
+                frame_number=frame_num,
+                success=True,
+                description=description,
+                description_file=str(desc_file),
+                describe_usage=describe_result.get("usage"),
+                describe_duration_seconds=describe_result.get("duration"),
+                usage=render_result.get("usage"),
+                api_response=render_result.get("response"),
+                file_path=str(frame_path),
+                file_size_bytes=file_size,
+                output_dimensions=frame_size,
+                duration_seconds=total_duration,
+            )
+            
+            current_image = new_image
+
+            progress.set_postfix({
+                "size": f"{file_size // 1024}KB",
+                "cost": f"${run_log.stats['total_cost']:.3f}",
+            })
+
+        except Exception as e:
+            print(f"\n❌ Failed to save frame {frame_num}: {e}")
+            run_log.log_frame(
+                frame_number=frame_num,
+                success=False,
+                description=description,
+                description_file=str(desc_file),
+                describe_usage=describe_result.get("usage"),
+                describe_duration_seconds=describe_result.get("duration"),
+                usage=render_result.get("usage"),
+                duration_seconds=render_result.get("duration"),
+                error=f"Failed to save: {e}",
+            )
+
+    # End session (mark as interrupted if needed)
+    if interrupted:
+        run_log.mark_interrupted()
+    else:
+        run_log.end_session()
+
+    # Generate outputs (MP4, GIF, or both)
+    if run_log.stats["frames_generated"] > 0:
+        job.generate_outputs(images_dir, run_dir, args.fps, args.format)
+
+    # Print and save report
+    run_log.print_summary(show_continue_command=True)
+    log_path = run_log.save()
+    print(f"\n📝 Run log saved: {log_path}")
+
+    return 0 if run_log.stats["frames_generated"] > 0 else 1
+
+
 async def cmd_generate(args, cfg: dict):
     """Main generation loop."""
     global _shutdown_requested
+    
+    # Dispatch to prompt loop if enabled
+    if args.prompt_loop:
+        return await cmd_generate_prompt_loop(args, cfg)
     
     # Load API key
     try:
@@ -637,6 +909,7 @@ async def cmd_generate(args, cfg: dict):
 def build_parser(cfg: dict) -> argparse.ArgumentParser:
     """Build the argument parser with settings from config."""
     prompts = cfg.get("prompts", {})
+    describe_prompts = cfg.get("describe_prompts", {})
     models = cfg.get("models", {})
     defaults = cfg.get("defaults", {})
     sizes = cfg.get("sizes", {})
@@ -745,6 +1018,23 @@ Available models:
         type=int,
         help="Custom frame height (requires --size custom)",
     )
+    # Prompt loop mode arguments
+    parser.add_argument(
+        "--prompt-loop",
+        action="store_true",
+        help="Enable prompt loop mode: each frame is described (image→text) then rendered (text→image)",
+    )
+    parser.add_argument(
+        "--describe-mode",
+        choices=list(describe_prompts.keys()) + ["custom"],
+        default="detailed",
+        help=f"How to describe images in prompt-loop mode. Presets: {', '.join(describe_prompts.keys())}. Default: detailed",
+    )
+    parser.add_argument(
+        "--describe-prompt",
+        help="Custom describe prompt (used when --describe-mode is 'custom')",
+    )
+    
     parser.add_argument(
         "--list-modes",
         action="store_true",
@@ -792,8 +1082,8 @@ def main():
     # Validate required args for new generation
     if not args.image:
         parser.error("--image/-i is required for new generation (or use --continue)")
-    if not args.mode:
-        parser.error("--mode/-m is required for generation")
+    if not args.mode and not args.prompt_loop:
+        parser.error("--mode/-m is required for generation (or use --prompt-loop)")
 
     # Run the generation
     return asyncio.run(cmd_generate(args, cfg))

@@ -171,3 +171,69 @@ def test_runlog_auto_saves_after_frame(temp_output_dir):
     loaded = RunLog.load(log_file)
     assert len(loaded.frames) == 1
     assert loaded.frames[0]["frame_number"] == 1
+
+
+def test_runlog_tracks_prompt_loop_fields(temp_output_dir):
+    """RunLog tracks description and describe_usage for prompt loop mode."""
+    from imageloop.runlog import RunLog
+    
+    run_dir = temp_output_dir / "test_run"
+    run_dir.mkdir()
+    log = RunLog(run_dir=run_dir)
+    
+    log.start_session(is_continuation=False)
+    
+    # Log a prompt loop frame with both describe and render usage
+    log.log_frame(
+        frame_number=1,
+        success=True,
+        description="A beautiful landscape with mountains and a lake.",
+        description_file="descriptions/frame_001.txt",
+        describe_usage={"cost": 0.001, "total_tokens": 50, "input_tokens": 40, "output_tokens": 10},
+        describe_duration_seconds=1.5,
+        usage={"cost": 0.02, "total_tokens": 200, "input_tokens": 150, "output_tokens": 50},
+        file_path="images/frame_001.png",
+        file_size_bytes=2048,
+        duration_seconds=5.0,
+    )
+    
+    log.end_session()
+    
+    # Check frame entry has description fields
+    assert len(log.frames) == 1
+    frame = log.frames[0]
+    assert frame["description"] == "A beautiful landscape with mountains and a lake."
+    assert frame["description_file"] == "descriptions/frame_001.txt"
+    assert frame["describe_usage"]["cost"] == 0.001
+    assert frame["describe_duration_seconds"] == 1.5
+    
+    # Check cumulative stats include both describe and render costs
+    assert log.stats["total_cost"] == pytest.approx(0.021, rel=0.01)
+    assert log.stats["api_calls"] == 2  # One for describe, one for render
+    assert log.stats["total_tokens"] == 250  # 50 + 200
+
+
+def test_runlog_config_has_describe_fields(temp_output_dir):
+    """RunLog config includes describe_mode and describe_prompt."""
+    from imageloop.runlog import RunLog
+    
+    run_dir = temp_output_dir / "test_run"
+    run_dir.mkdir()
+    log = RunLog(run_dir=run_dir)
+    
+    log.set_config(
+        model="test-model",
+        mode="prompt-loop",
+        describe_mode="detailed",
+        describe_prompt="Describe this image in detail.",
+    )
+    
+    assert log.config["describe_mode"] == "detailed"
+    assert log.config["describe_prompt"] == "Describe this image in detail."
+    
+    # Save and reload
+    log_path = log.save()
+    loaded = RunLog.load(log_path)
+    
+    assert loaded.config["describe_mode"] == "detailed"
+    assert loaded.config["describe_prompt"] == "Describe this image in detail."

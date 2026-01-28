@@ -15,6 +15,14 @@ DEFAULT_SETTINGS = {
         "nano-banana-pro": "google/gemini-3-pro-image-preview",
         "riverflow": "sourceful/riverflow-v2-standard-preview",
     },
+    "describe_prompts": {
+        "detailed": "Describe this image in detail, including the subject matter, composition, colors, lighting, mood, and any notable details.",
+        "artistic": "Describe this image as an art director would, focusing on visual style, composition, color palette, lighting techniques, and artistic elements.",
+        "simple": "Briefly describe what you see in this image.",
+        "technical": "Provide a technical description of this image including dimensions, aspect ratio, color distribution, focal points, and visual hierarchy.",
+        "narrative": "Describe this image as if telling a story. What is happening? What might have happened before or after this moment?",
+        "emotional": "Describe the emotional quality and atmosphere of this image. What feelings does it evoke and why?",
+    },
     "prompts": {
         "up": "Gently pan the camera up, extending the image.",
         "down": "Gently pan the camera down, extending the image.",
@@ -169,6 +177,40 @@ def get_prompt(mode: str, custom_prompt: str = None, settings: Dict[str, Any] = 
     available = sorted(prompts.keys())
     raise ValueError(
         f"Unknown mode: {mode}. Available: {', '.join(available)}, or 'custom' with --prompt"
+    )
+
+
+def get_describe_prompt(mode: str, custom_prompt: str = None, settings: Dict[str, Any] = None) -> str:
+    """
+    Get describe prompt for prompt-loop mode.
+    
+    Args:
+        mode: Describe mode name (preset) or "custom"
+        custom_prompt: Custom prompt text (required when mode is "custom")
+        settings: Settings dictionary (if None, loads from default location)
+    
+    Returns:
+        Describe prompt text
+    
+    Raises:
+        ValueError: If mode is unknown or custom mode lacks prompt
+    """
+    if settings is None:
+        settings = load_settings()
+    
+    describe_prompts = settings.get("describe_prompts", {})
+    
+    if mode == "custom":
+        if not custom_prompt:
+            raise ValueError("Custom describe prompt required when describe mode is 'custom'")
+        return custom_prompt
+    
+    if mode in describe_prompts:
+        return describe_prompts[mode]
+    
+    available = sorted(describe_prompts.keys())
+    raise ValueError(
+        f"Unknown describe mode: {mode}. Available: {', '.join(available)}, or 'custom' with --describe-prompt"
     )
 
 

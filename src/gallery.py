@@ -180,7 +180,7 @@ def get_runs(output_dir: Path) -> list[dict]:
                         "legacy": False,
                     })
                 
-                # Handle image loop runs (existing logic)
+                # Handle image loop runs (existing logic) and prompt-loop runs
                 else:
                     from imageloop import runlog, settings
                     
@@ -193,6 +193,10 @@ def get_runs(output_dir: Path) -> list[dict]:
                     config = run_log.config
                     stats = run_log.stats
                     frames = run_log.frames
+                    
+                    # Detect prompt-loop mode
+                    mode = summary.get("mode", config.get("mode", "unknown"))
+                    is_prompt_loop = mode == "prompt-loop"
                     
                     # Find first and last successful frames
                     successful_frames = [f for f in frames if f.get("success") and f.get("file")]
@@ -224,12 +228,39 @@ def get_runs(output_dir: Path) -> list[dict]:
                     else:
                         progress_str = None
                     
-                    runs.append({
+                    # Build frame data with descriptions for prompt-loop
+                    frame_data = []
+                    for f in frames:
+                        if not f.get("file"):
+                            continue
+                        frame_entry = {
+                            "number": f.get("frame_number"),
+                            "file": f.get("file"),
+                            "success": f.get("success", False),
+                            "duration": f.get("duration_seconds"),
+                            "cost": f.get("usage", {}).get("cost") if f.get("usage") else None,
+                        }
+                        # Add prompt-loop specific fields
+                        if is_prompt_loop:
+                            frame_entry["description"] = f.get("description")
+                            frame_entry["description_file"] = f.get("description_file")
+                            frame_entry["describe_cost"] = f.get("describe_usage", {}).get("cost") if f.get("describe_usage") else None
+                            frame_entry["describe_duration"] = f.get("describe_duration_seconds")
+                        frame_data.append(frame_entry)
+                    
+                    # For prompt-loop, use describe_prompt as the main prompt display
+                    if is_prompt_loop:
+                        describe_prompt = config.get("describe_prompt", "")
+                        prompt_display = f"Describe: {describe_prompt[:100]}..." if len(describe_prompt) > 100 else f"Describe: {describe_prompt}"
+                    else:
+                        prompt_display = config.get("prompt", "")
+                    
+                    run_entry = {
                         "folder": folder.name,
-                        "type": "image-loop",
+                        "type": "prompt-loop" if is_prompt_loop else "image-loop",
                         "model": model,
                         "model_short": model_short,
-                        "mode": summary.get("mode", config.get("mode", "unknown")),
+                        "mode": mode,
                         "date": date_display,
                         "date_iso": created,
                         "status": status,
@@ -238,25 +269,23 @@ def get_runs(output_dir: Path) -> list[dict]:
                         "requested_frames": requested,
                         "total_cost": summary.get("total_cost", f"${stats.get('total_cost', 0):.4f}"),
                         "total_time": summary.get("total_time", f"{stats.get('total_time_seconds', 0):.1f}s"),
-                        "prompt": config.get("prompt", ""),
+                        "prompt": prompt_display,
                         "size": config.get("size", ""),
                         "dimensions": config.get("frame_dimensions", {}),
                         "first_frame": first_frame.get("file") if first_frame else None,
                         "last_frame": last_frame.get("file") if last_frame else None,
-                        "frames": [
-                            {
-                                "number": f.get("frame_number"),
-                                "file": f.get("file"),
-                                "success": f.get("success", False),
-                                "duration": f.get("duration_seconds"),
-                                "cost": f.get("usage", {}).get("cost") if f.get("usage") else None,
-                            }
-                            for f in frames if f.get("file")
-                        ],
+                        "frames": frame_data,
                         "stats": stats,
                         "config": config,
                         "legacy": False,
-                    })
+                    }
+                    
+                    # Add prompt-loop specific config
+                    if is_prompt_loop:
+                        run_entry["describe_mode"] = config.get("describe_mode", "detailed")
+                        run_entry["describe_prompt"] = config.get("describe_prompt", "")
+                    
+                    runs.append(run_entry)
             except Exception as e:
                 print(f"Warning: Could not parse {run_json}: {e}")
                 continue
@@ -350,6 +379,33 @@ def generate_html(runs: list[dict], output_dir: Path) -> str:
                     <span class="cost">{run['total_cost']}</span>
                 </div>
                 <div class="card-status {status_class}">{run['status']}</div>
+            </div>
+        </div>
+        '''
+        
+        # Prompt loop cards
+        elif run_type == "prompt-loop":
+            first_thumb = f"/{run['first_frame']}" if run.get('first_frame') else ""
+            last_thumb = f"/{run['last_frame']}" if run.get('last_frame') else ""
+            
+            cards_html += f'''
+        <div class="card" data-folder="{run['folder']}" onclick="openModal('{run['folder']}')">
+            <div class="card-thumbnails">
+                <img src="{first_thumb}" alt="First frame" class="thumb thumb-first" loading="lazy">
+                <div class="thumb-arrow">🔄</div>
+                <img src="{last_thumb}" alt="Last frame" class="thumb thumb-last" loading="lazy">
+            </div>
+            <div class="card-info">
+                <div class="card-header">
+                    <span class="model-name">{run['model_short']}</span>
+                    <span class="mode-badge mode-promptloop">prompt-loop</span>
+                </div>
+                <div class="card-meta">
+                    <span class="date">{run['date']}</span>
+                    <span class="frames">{run['total_frames']} frames</span>
+                    <span class="cost">{run['total_cost']}</span>
+                </div>
+                <div class="card-status {status_class}">{run['status']}{f" ({run['progress']})" if run.get('progress') else ''}</div>
             </div>
         </div>
         '''
@@ -568,6 +624,11 @@ def generate_html(runs: list[dict], output_dir: Path) -> str:
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.03em;
+        }}
+        
+        .mode-badge.mode-promptloop {{
+            background: linear-gradient(135deg, #8b5cf6, #6366f1);
+            color: #fff;
         }}
         
         .card-meta {{
@@ -963,6 +1024,49 @@ def generate_html(runs: list[dict], output_dir: Path) -> str:
             color: var(--text-secondary);
         }}
         
+        .description-section {{
+            margin-top: 1rem;
+            padding: 1.25rem;
+            background: var(--bg-card);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            border-left: 3px solid #8b5cf6;
+        }}
+        
+        .description-section.hidden {{
+            display: none;
+        }}
+        
+        .description-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }}
+        
+        .description-label {{
+            font-size: 0.75rem;
+            color: #8b5cf6;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }}
+        
+        .description-frame {{
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }}
+        
+        .description-text {{
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }}
+        
         .empty-state {{
             text-align: center;
             padding: 4rem 2rem;
@@ -1059,6 +1163,14 @@ def generate_html(runs: list[dict], output_dir: Path) -> str:
                 
                 <div class="text2img-grid" id="text2img-grid" style="display: none;">
                     <!-- Text-to-image grid populated by JS -->
+                </div>
+                
+                <div class="description-section hidden" id="description-section">
+                    <div class="description-header">
+                        <span class="description-label">Frame Description (image → text)</span>
+                        <span class="description-frame" id="description-frame">Frame 1</span>
+                    </div>
+                    <div class="description-text" id="description-text">Loading...</div>
                 </div>
                 
                 <div class="stats-grid" id="stats-grid">
@@ -1173,6 +1285,12 @@ def generate_html(runs: list[dict], output_dir: Path) -> str:
             // Update path
             document.getElementById('modal-path').textContent = '{output_dir}/' + currentRun.folder;
             
+            const isPromptLoop = currentRun.type === 'prompt-loop';
+            
+            // Show/hide description section for prompt-loop
+            const descSection = document.getElementById('description-section');
+            descSection.classList.toggle('hidden', !isPromptLoop);
+            
             if (isText2Img) {{
                 // Text-to-image display
                 const grid = document.getElementById('text2img-grid');
@@ -1221,6 +1339,46 @@ def generate_html(runs: list[dict], output_dir: Path) -> str:
                         <div class="stat-value">${{currentRun.status}}</div>
                     </div>
                 `;
+            }} else if (isPromptLoop) {{
+                // Prompt loop display - similar to image loop but with description panel
+                const statsGrid = document.getElementById('stats-grid');
+                const dims = currentRun.dimensions;
+                const dimsStr = dims ? `${{dims.width}}×${{dims.height}}` : 'Unknown';
+                const describeMode = currentRun.describe_mode || 'detailed';
+                
+                statsGrid.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-label">Total Cost</div>
+                        <div class="stat-value mono">${{currentRun.total_cost}}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Total Time</div>
+                        <div class="stat-value mono">${{currentRun.total_time}}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Frames</div>
+                        <div class="stat-value">${{currentRun.total_frames}}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Dimensions</div>
+                        <div class="stat-value mono">${{dimsStr}}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Describe Mode</div>
+                        <div class="stat-value">${{describeMode}}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Status</div>
+                        <div class="stat-value">${{currentRun.status}}</div>
+                    </div>
+                `;
+                
+                // Update total frames
+                document.getElementById('total-frames').textContent = currentRun.frames.length;
+                
+                // Show first frame and description
+                updateFrame();
+                updateDescription();
             }} else {{
                 // Image loop display (existing)
                 const statsGrid = document.getElementById('stats-grid');
@@ -1295,6 +1453,29 @@ def generate_html(runs: list[dict], output_dir: Path) -> str:
             // Update nav buttons
             document.getElementById('prev-btn').disabled = currentFrameIndex === 0;
             document.getElementById('next-btn').disabled = currentFrameIndex >= currentRun.frames.length - 1;
+            
+            // Update description for prompt-loop
+            if (currentRun.type === 'prompt-loop') {{
+                updateDescription();
+            }}
+        }}
+        
+        function updateDescription() {{
+            if (!currentRun || currentRun.type !== 'prompt-loop') return;
+            
+            const frame = currentRun.frames[currentFrameIndex];
+            const descSection = document.getElementById('description-section');
+            const descText = document.getElementById('description-text');
+            const descFrame = document.getElementById('description-frame');
+            
+            // Frame 0 is the input, no description
+            if (frame.number === 0 || !frame.description) {{
+                descText.textContent = '(Input frame - no description)';
+                descFrame.textContent = 'Frame ' + (currentFrameIndex + 1);
+            }} else {{
+                descText.textContent = frame.description;
+                descFrame.textContent = 'Frame ' + frame.number + ' description';
+            }}
         }}
         
         function nextFrame() {{

@@ -7,6 +7,15 @@ models:
   nano-banana-pro: google/gemini-3-pro-image-preview
   riverflow: sourceful/riverflow-v2-standard-preview
 
+# Describe prompts for prompt-loop mode (image-to-text step)
+describe_prompts:
+  detailed: "Describe this image in detail, including the subject matter, composition, colors, lighting, mood, and any notable details."
+  artistic: "Describe this image as an art director would, focusing on visual style, composition, color palette, lighting techniques, and artistic elements."
+  simple: "Briefly describe what you see in this image."
+  technical: "Provide a technical description of this image including dimensions, aspect ratio, color distribution, focal points, and visual hierarchy."
+  narrative: "Describe this image as if telling a story. What is happening? What might have happened before or after this moment?"
+  emotional: "Describe the emotional quality and atmosphere of this image. What feelings does it evoke and why?"
+
 # Preset prompts for modes
 prompts:
   up: "Gently pan the camera up, extending the image."
