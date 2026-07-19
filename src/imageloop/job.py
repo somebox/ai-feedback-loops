@@ -59,6 +59,13 @@ def generate_video(images_dir: Path, output_file: Path, frame_rate: int = 12):
         print(f"✅ Video saved: {output_file} ({file_size:.1f} MB)")
         return True
 
+    except FileNotFoundError:
+        print("❌ Video generation failed: ffmpeg is not installed or not in PATH")
+        print("   Install ffmpeg: sudo apt install ffmpeg  (Ubuntu/Debian)")
+        print("                   brew install ffmpeg      (macOS)")
+        print("   Or visit: https://ffmpeg.org/download.html")
+        return False
+
     except ffmpeg.Error as e:
         stderr = e.stderr.decode("utf8") if e.stderr else str(e)
         print(f"❌ Video generation failed: {stderr}")
